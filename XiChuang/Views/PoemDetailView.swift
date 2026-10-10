@@ -12,6 +12,7 @@ struct PoemDetailView: View {
     @State private var error: String?
     @State private var author: Author?
     @State private var section: AnalysisSection = .translation
+    @State private var authorExpanded = false
 
     enum AnalysisSection: String, CaseIterable, Identifiable {
         case translation = "译文", annotations = "注释", appreciation = "赏析", background = "背景", form = "体裁"
@@ -41,8 +42,9 @@ struct PoemDetailView: View {
                     card("原注", poem.notes.joined(separator: "\n"))
                 }
                 if let author, !author.description.isEmpty {
-                    // 小传全文显示；原数据里多个来源的小传以「--」相连，拆成段落
-                    card("作者 · \(author.name)", author.description.replacingOccurrences(of: "--", with: "\n"))
+                    // 原数据里多个来源的小传以「--」相连，拆成段落；长的先折叠
+                    card("作者 · \(author.name)", author.description.replacingOccurrences(of: "--", with: "\n"),
+                         expanded: $authorExpanded)
                 }
                 VStack(spacing: 14) {
                     if !["佚名", "无名氏", "不详"].contains(poem.author) {
@@ -191,19 +193,49 @@ struct PoemDetailView: View {
         }
     }
 
-    private func card(_ title: String, _ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    /// 折叠时大约显示的字数；超过才出现「展开全部」
+    private static let collapsedLength = 150
+
+    /// 信息卡片。传入 expanded 时，长文先折叠成几行，点「展开全部」显示全文
+    private func card(_ title: String, _ text: String, expanded: Binding<Bool>? = nil) -> some View {
+        let paragraphs = text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let collapsible = expanded != nil && paragraphs.joined().count > Self.collapsedLength
+        let collapsed = collapsible && !(expanded?.wrappedValue ?? true)
+        return VStack(alignment: .leading, spacing: 10) {
             Text(title).font(Theme.title(16)).foregroundStyle(Theme.ink)
-            ForEach(Array(text.components(separatedBy: "\n")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-                .enumerated()), id: \.offset) { _, paragraph in
-                Text(paragraph)
+            if collapsed {
+                Text(paragraphs.joined(separator: " "))
                     .font(Theme.body(15))
                     .foregroundStyle(Theme.inkLight)
                     .lineSpacing(6)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(5)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                    Text(paragraph)
+                        .font(Theme.body(15))
+                        .foregroundStyle(Theme.inkLight)
+                        .lineSpacing(6)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if collapsible, let expanded {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) { expanded.wrappedValue.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(expanded.wrappedValue ? "收起" : "展开全部")
+                        Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down").font(.caption)
+                    }
+                    .font(Theme.poem(14))
+                    .foregroundStyle(Theme.cinnabar)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .textSelection(.enabled)
