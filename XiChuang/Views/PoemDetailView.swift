@@ -41,19 +41,15 @@ struct PoemDetailView: View {
                     card("原注", poem.notes.joined(separator: "\n"))
                 }
                 if let author, !author.description.isEmpty {
-                    NavigationLink(value: Route.author(author.name)) {
-                        card("作者 · \(author.name)", author.description, lineLimit: 8, showsChevron: true)
-                    }
-                    .buttonStyle(.plain)
+                    // 小传全文显示；原数据里多个来源的小传以「--」相连，拆成段落
+                    card("作者 · \(author.name)", author.description.replacingOccurrences(of: "--", with: "\n"))
                 }
-                if let rhythmic = poem.rhythmic {
-                    NavigationLink(value: Route.rhythmic(rhythmic)) {
-                        HStack {
-                            Text("更多「\(rhythmic)」")
-                            Image(systemName: "chevron.right").font(.caption)
-                        }
-                        .font(Theme.poem(15))
-                        .foregroundStyle(Theme.cinnabar)
+                VStack(spacing: 14) {
+                    if !["佚名", "无名氏", "不详"].contains(poem.author) {
+                        moreLink("\(poem.author)的全部作品", Route.author(poem.author))
+                    }
+                    if let rhythmic = poem.rhythmic {
+                        moreLink("更多「\(rhythmic)」", Route.rhythmic(rhythmic))
                     }
                 }
             }
@@ -184,22 +180,33 @@ struct PoemDetailView: View {
         }
     }
 
-    private func card(_ title: String, _ text: String, lineLimit: Int? = nil, showsChevron: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func moreLink(_ title: String, _ route: Route) -> some View {
+        NavigationLink(value: route) {
             HStack {
-                Text(title).font(Theme.title(16)).foregroundStyle(Theme.ink)
-                Spacer()
-                if showsChevron {
-                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.inkFaint)
-                }
+                Text(title)
+                Image(systemName: "chevron.right").font(.caption)
             }
-            Text(text)
-                .font(Theme.body(15))
-                .foregroundStyle(Theme.inkLight)
-                .lineSpacing(6)
-                .lineLimit(lineLimit)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .font(Theme.poem(15))
+            .foregroundStyle(Theme.cinnabar)
         }
+    }
+
+    private func card(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(Theme.title(16)).foregroundStyle(Theme.ink)
+            ForEach(Array(text.components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .enumerated()), id: \.offset) { _, paragraph in
+                Text(paragraph)
+                    .font(Theme.body(15))
+                    .foregroundStyle(Theme.inkLight)
+                    .lineSpacing(6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .textSelection(.enabled)
         .padding(18)
         .background(Theme.paperDeep.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
         .padding(.horizontal, 20)
