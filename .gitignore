@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+xcuserdata/
+DerivedData/
+*.xcodeproj/
+XiChuang/Info.plist
+# 由 scripts/bootstrap.sh 生成 / 下载（体积约 105 MB，超过 GitHub 单文件上限）
+XiChuang/Resources/poetry.sqlite
+XiChuang/Resources/Fonts/*.ttf
+__pycache__/

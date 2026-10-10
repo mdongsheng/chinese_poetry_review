@@ -1,0 +1,58 @@
+# 用 XcodeGen 生成 Xcode 工程: brew install xcodegen && xcodegen generate
+name: XiChuang
+options:
+  bundleIdPrefix: app.xichuang
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: zh-Hans
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""   # 在这里或 Xcode 的 Signing & Capabilities 中填写你的 Team ID
+targets:
+  XiChuang:
+    type: application
+    platform: iOS
+    sources:
+      - path: XiChuang
+        excludes:
+          - "Resources/poetry.sqlite"
+          - "Resources/Fonts"
+          - "Resources/Fonts/**"
+      # 这两个是 scripts/bootstrap.sh 生成 / 下载的，optional 让缺字体时也能编译
+      - path: XiChuang/Resources/poetry.sqlite
+        buildPhase: resources
+        optional: true
+      - path: XiChuang/Resources/Fonts
+        type: folder
+        buildPhase: resources
+        optional: true
+    preBuildScripts:
+      - name: Check poetry database
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ ! -f "${SRCROOT}/XiChuang/Resources/poetry.sqlite" ]; then
+            echo "error: 缺少 XiChuang/Resources/poetry.sqlite，请先运行 scripts/bootstrap.sh"
+            exit 1
+          fi
+    info:
+      path: XiChuang/Info.plist
+      properties:
+        CFBundleDisplayName: 每日一词
+        CFBundleDevelopmentRegion: zh-Hans
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [app.xichuang.prefetch]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.xichuang.daily
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
