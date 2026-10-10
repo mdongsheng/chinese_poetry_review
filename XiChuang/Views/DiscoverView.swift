@@ -63,9 +63,9 @@ struct DiscoverView: View {
                 Label("随机一首词", systemImage: "dice")
             }
             Button {
-                randomPoem = PoetryDatabase.shared.randomPoem()
+                randomPoem = PoetryDatabase.shared.randomLushi()
             } label: {
-                Label("随机一首诗词", systemImage: "shuffle")
+                Label("随机一首律诗", systemImage: "shuffle")
             }
         }
         .font(Theme.poem(16))

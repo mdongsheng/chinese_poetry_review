@@ -4,7 +4,7 @@
 整理成 App 内置的只读 SQLite 数据库 XiChuang/Resources/poetry.sqlite。
 
 用法:
-    pip3 install opencc
+    pip3 install opencc pypinyin
     python3 scripts/build_database.py --source /path/to/chinese-poetry
     # 不传 --source 时会自动浅克隆到 .build/chinese-poetry
 
@@ -13,7 +13,8 @@
     诗经、楚辞、曹操诗集; 水墨唐诗/唐诗三百首/宋词三百首 只作为标签与解析合并进已有条目
   * 繁体统一转为简体 (OpenCC t2s)
   * 生成作者小传表
-  * 为所有「词」生成每日推送顺序 daily_rank: 名篇优先, 同一层级内用固定种子打乱
+  * 分别为「词」和「律诗」生成每日推送顺序 daily_ci_rank / daily_shi_rank:
+    名篇优先, 同一层级内用固定种子打乱。诗只推五律、七律, 见 is_lushi
 """
 import argparse
 import glob
@@ -27,8 +28,9 @@ import sys
 
 try:
     import opencc
+    from pypinyin import Style, pinyin
 except ImportError:
-    sys.exit("缺少 opencc: 请先运行 pip3 install opencc")
+    sys.exit("缺少依赖: 请先运行 pip3 install opencc pypinyin")
 
 T2S = opencc.OpenCC("t2s")
 REPO_URL = "https://github.com/chinese-poetry/chinese-poetry.git"
@@ -45,6 +47,23 @@ FAMOUS_CI_AUTHORS = [
     "林逋", "王观", "舒亶", "谢逸", "陈克", "吕本中", "向子諲", "岳珂", "刘辰翁",
     "高观国", "卢祖皋", "严蕊", "聂胜琼", "魏夫人", "孙光宪",
 ]
+
+# 诗的推送层级
+FAMOUS_TANG_POETS = [
+    "李白", "杜甫", "王维", "白居易", "李商隐", "杜牧", "孟浩然", "王昌龄", "刘禹锡", "柳宗元",
+    "韩愈", "岑参", "高适", "王之涣", "贺知章", "李贺", "韦应物", "张九龄", "陈子昂", "骆宾王",
+    "王勃", "杨炯", "卢照邻", "元稹", "张籍", "贾岛", "孟郊", "刘长卿", "钱起", "韦庄",
+    "杜荀鹤", "罗隐", "皮日休", "陆龟蒙", "宋之问", "沈佺期", "崔颢", "常建", "祖咏", "王翰",
+    "李益", "卢纶", "司空曙", "张继", "崔护", "金昌绪", "朱庆余", "许浑", "温庭筠", "薛涛",
+    "鱼玄机", "张若虚", "王建", "李绅", "綦毋潜", "储光羲", "裴迪", "戴叔伦", "顾况", "皎然",
+]
+FAMOUS_SONG_POETS = [
+    "苏轼", "陆游", "王安石", "黄庭坚", "杨万里", "范成大", "欧阳修", "梅尧臣", "苏舜钦",
+    "陈与义", "陈师道", "林逋", "文天祥", "朱熹", "秦观", "曾巩", "苏辙", "晏殊", "叶绍翁",
+    "翁卷", "赵师秀", "戴复古", "刘克庄", "姜夔", "王禹偁", "寇准", "邵雍", "程颢", "李清照",
+    "岳飞", "范仲淹", "张耒", "晁补之", "汪藻", "曾几", "吕本中", "尤袤", "萧德藻",
+]
+LUSHI_MAX_VIOLATIONS = 3
 
 PUNCT = "，。、；：？！,.;:?!"
 
@@ -64,6 +83,27 @@ def first_clause(lines):
         if part:
             return part
     return text[:8]
+
+
+def tone(ch):
+    """平 p / 仄 z, 按普通话声调近似"""
+    t = pinyin(ch, style=Style.TONE3)[0][0]
+    return "p" if t[-1] in "12" else "z" if t[-1] in "34" else None
+
+
+def tone_violations(lines):
+    v = 0
+    for i, line in enumerate(lines):
+        end = tone(line[-1])
+        if i % 2 == 1 and end != "p":         # 偶句押平声韵
+            v += 1
+        if i in (2, 4, 6) and end != "z":     # 三五七句句末用仄
+            v += 1
+    for k in ([1] if len(lines[0]) == 5 else [1, 3]):   # 二字（七言兼四字）
+        ts = [tone(line[k]) for line in lines]
+        v += sum(ts[i] == ts[i + 1] for i in (0, 2, 4, 6))   # 联内相对
+        v += sum(ts[i] != ts[i + 1] for i in (1, 3, 5))      # 联间相粘
+    return v
 
 
 def key_of(author, lines):
@@ -208,17 +248,56 @@ class Builder:
                      collection="元曲", kind="qu", lines=item["paragraphs"])
 
     def daily_order(self):
+        for p in self.poems:
+            if p["kind"] == "shi":
+                p["shi_tier"] = self.shi_tier(p)
+        self.assign_rank("ci", "tier", "daily_ci_rank")
+        self.assign_rank("shi", "shi_tier", "daily_shi_rank")
+
+    @staticmethod
+    def is_lushi(p):
+        """五言 / 七言律诗。
+
+        唐诗三百首带体裁标签的直接用标签; 其余要求八句、每句同为五字或七字,
+        再用普通话声调粗查平仄 (偶句押平声、三五七句收仄、对与粘)。
+        普通话没有入声, 真律诗也常有一两处对不上, 所以允许 LUSHI_MAX_VIOLATIONS 处出入。
+        """
+        tags = p["tags"]
+        if tags & {"五言律诗", "七言律诗"}:
+            return True
+        if tags & {"五言古诗", "七言古诗", "乐府", "五言绝句", "七言绝句"}:
+            return False
+        text = re.sub(r"[\[\]【】□]", "", p["content"])
+        lines = [c for c in re.split(r"[%s\s]" % re.escape(PUNCT), text) if c]
+        if len(lines) != 8 or len({len(c) for c in lines}) != 1 or len(lines[0]) not in (5, 7):
+            return False
+        return tone_violations(lines) <= LUSHI_MAX_VIOLATIONS
+
+    @classmethod
+    def shi_tier(cls, p):
+        """只有律诗进入每日推送"""
+        if not cls.is_lushi(p):
+            return None
+        if "唐诗三百首" in p["tags"] or "水墨唐诗" in p["tags"]:
+            return 0
+        if p["dynasty"] == "唐" and p["author"] in FAMOUS_TANG_POETS:
+            return 1
+        if p["dynasty"] == "宋" and p["author"] in FAMOUS_SONG_POETS:
+            return 2
+        return 3
+
+    def assign_rank(self, kind, tier_key, rank_key):
         rng = random.Random(20260101)
         tiers = {}
         for p in self.poems:
-            if p["kind"] == "ci" and p["tier"] is not None:
-                tiers.setdefault(p["tier"], []).append(p)
+            if p["kind"] == kind and p.get(tier_key) is not None:
+                tiers.setdefault(p[tier_key], []).append(p)
         rank = 0
         for tier in sorted(tiers):
             group = tiers[tier]
             rng.shuffle(group)
             for p in group:
-                p["daily_rank"] = rank
+                p[rank_key] = rank
                 rank += 1
 
     def write(self, out):
@@ -241,7 +320,8 @@ class Builder:
                 notes TEXT,                  -- 原数据自带的注释
                 prologue TEXT,               -- 原数据自带的赏析
                 tags TEXT,                   -- 以 | 分隔
-                daily_rank INTEGER           -- 每日一词推送顺序
+                daily_ci_rank INTEGER,       -- 每日推送: 词的顺序
+                daily_shi_rank INTEGER       -- 每日推送: 诗的顺序
             );
             CREATE TABLE authors (
                 name TEXT NOT NULL,
@@ -255,25 +335,28 @@ class Builder:
         for i, p in enumerate(self.poems, start=1):
             rows.append((i, p["title"], p["author"], p["dynasty"], p["collection"], p["kind"],
                          p["rhythmic"], p["content"], p["notes"], p["prologue"],
-                         "|".join(sorted(p["tags"])) or None, p.get("daily_rank")))
-        db.executemany("INSERT INTO poems VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+                         "|".join(sorted(p["tags"])) or None, p.get("daily_ci_rank"), p.get("daily_shi_rank")))
+        db.executemany("INSERT INTO poems VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
         db.executemany("INSERT INTO authors VALUES (?,?,?)",
                        [(n, d, desc) for (n, d), desc in self.authors.items()])
         db.executescript("""
             CREATE INDEX idx_poems_author ON poems(author);
             CREATE INDEX idx_poems_rhythmic ON poems(rhythmic) WHERE rhythmic IS NOT NULL;
             CREATE INDEX idx_poems_collection ON poems(collection);
-            CREATE UNIQUE INDEX idx_poems_daily ON poems(daily_rank) WHERE daily_rank IS NOT NULL;
+            CREATE UNIQUE INDEX idx_poems_daily_ci ON poems(daily_ci_rank) WHERE daily_ci_rank IS NOT NULL;
+            CREATE UNIQUE INDEX idx_poems_daily_shi ON poems(daily_shi_rank) WHERE daily_shi_rank IS NOT NULL;
         """)
-        daily = sum(1 for p in self.poems if p.get("daily_rank") is not None)
+        daily_ci = sum(1 for p in self.poems if p.get("daily_ci_rank") is not None)
+        daily_shi = sum(1 for p in self.poems if p.get("daily_shi_rank") is not None)
         db.executemany("INSERT INTO meta VALUES (?,?)", [
-            ("source", REPO_URL), ("poem_count", str(len(rows))), ("daily_count", str(daily)),
+            ("source", REPO_URL), ("poem_count", str(len(rows))),
+            ("daily_ci_count", str(daily_ci)), ("daily_shi_count", str(daily_shi)),
         ])
         db.commit()
         db.execute("VACUUM")
         db.close()
         os.replace(tmp, out)
-        return len(rows), daily
+        return len(rows), daily_ci, daily_shi
 
 
 def ensure_source(path):
@@ -295,9 +378,10 @@ def main():
     b = Builder(ensure_source(args.source))
     b.build()
     b.daily_order()
-    total, daily = b.write(args.out)
+    total, daily_ci, daily_shi = b.write(args.out)
     size = os.path.getsize(args.out) / 1024 / 1024
-    print(f"完成: {total} 首作品, 其中 {daily} 首词进入每日推送, 作者 {len(b.authors)} 位, {size:.1f} MB → {args.out}")
+    print(f"完成: {total} 首作品, 每日推送 {daily_ci} 首词、{daily_shi} 首诗, "
+          f"作者 {len(b.authors)} 位, {size:.1f} MB → {args.out}")
 
 
 if __name__ == "__main__":

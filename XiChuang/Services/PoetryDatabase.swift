@@ -10,15 +10,17 @@ final class PoetryDatabase: @unchecked Sendable {
     private var db: OpaquePointer?
     private let lock = NSLock()
 
-    /// 进入每日推送轮换的词的数量
-    private(set) var dailyCount: Int = 0
+    /// 进入每日推送轮换的词 / 律诗数量
+    private(set) var dailyCiCount: Int = 0
+    private(set) var dailyShiCount: Int = 0
     private(set) var totalCount: Int = 0
     private(set) var isAvailable = false
 
     private init() {
         do {
             try open()
-            dailyCount = Int(scalar("SELECT COUNT(*) FROM poems WHERE daily_rank IS NOT NULL") ?? 0)
+            dailyCiCount = Int(scalar("SELECT COUNT(*) FROM poems WHERE daily_ci_rank IS NOT NULL") ?? 0)
+            dailyShiCount = Int(scalar("SELECT COUNT(*) FROM poems WHERE daily_shi_rank IS NOT NULL") ?? 0)
             totalCount = Int(scalar("SELECT COUNT(*) FROM poems") ?? 0)
             isAvailable = true
         } catch {
@@ -42,17 +44,23 @@ final class PoetryDatabase: @unchecked Sendable {
         poems("SELECT \(Self.columns) FROM poems WHERE id = ?", [.int(id)]).first
     }
 
-    /// 每日推送序列中第 rank 首词
-    func dailyPoem(rank: Int) -> Poem? {
-        guard dailyCount > 0 else { return nil }
-        let r = ((rank % dailyCount) + dailyCount) % dailyCount
-        return poems("SELECT \(Self.columns) FROM poems WHERE daily_rank = ?", [.int(Int64(r))]).first
+    /// 每日推送序列中第 rank 首词（kind = .ci）或律诗（kind = .shi），轮完从头再来
+    func dailyPoem(kind: Poem.Kind, rank: Int) -> Poem? {
+        let (count, column) = kind == .ci ? (dailyCiCount, "daily_ci_rank") : (dailyShiCount, "daily_shi_rank")
+        guard count > 0 else { return nil }
+        let r = ((rank % count) + count) % count
+        return poems("SELECT \(Self.columns) FROM poems WHERE \(column) = ?", [.int(Int64(r))]).first
+    }
+
+    /// 随机一首律诗
+    func randomLushi() -> Poem? {
+        dailyShiCount > 0 ? dailyPoem(kind: .shi, rank: Int.random(in: 0..<dailyShiCount)) : nil
     }
 
     /// 随机一首；只要词时从每日序列里挑，否则按 id 随机跳（比 ORDER BY RANDOM() 快得多）
     func randomPoem(kind: Poem.Kind? = nil) -> Poem? {
-        if kind == .ci, dailyCount > 0 {
-            return dailyPoem(rank: Int.random(in: 0..<dailyCount))
+        if kind == .ci, dailyCiCount > 0 {
+            return dailyPoem(kind: .ci, rank: Int.random(in: 0..<dailyCiCount))
         }
         let maxID = scalar("SELECT MAX(id) FROM poems") ?? 0
         guard maxID > 0 else { return nil }
@@ -73,13 +81,13 @@ final class PoetryDatabase: @unchecked Sendable {
         var results = poems("""
             SELECT \(Self.columns) FROM poems
             WHERE title LIKE ? OR author = ?
-            ORDER BY (daily_rank IS NULL), daily_rank, id LIMIT ?
+            ORDER BY \(Self.famousFirst) LIMIT ?
             """, [.text(like), .text(k), .int(Int64(limit))])
         if results.count < limit {
             let seen = Set(results.map(\.id))
             let more = poems("""
                 SELECT \(Self.columns) FROM poems WHERE content LIKE ?
-                ORDER BY (daily_rank IS NULL), daily_rank, id LIMIT ?
+                ORDER BY \(Self.famousFirst) LIMIT ?
                 """, [.text(like), .int(Int64(limit - results.count))])
             results += more.filter { !seen.contains($0.id) }
         }
@@ -87,12 +95,12 @@ final class PoetryDatabase: @unchecked Sendable {
     }
 
     func poems(byAuthor author: String, limit: Int = 500) -> [Poem] {
-        poems("SELECT \(Self.columns) FROM poems WHERE author = ? ORDER BY (daily_rank IS NULL), daily_rank, id LIMIT ?",
+        poems("SELECT \(Self.columns) FROM poems WHERE author = ? ORDER BY \(Self.famousFirst) LIMIT ?",
               [.text(author), .int(Int64(limit))])
     }
 
     func poems(byRhythmic rhythmic: String, limit: Int = 500) -> [Poem] {
-        poems("SELECT \(Self.columns) FROM poems WHERE rhythmic = ? ORDER BY (daily_rank IS NULL), daily_rank, id LIMIT ?",
+        poems("SELECT \(Self.columns) FROM poems WHERE rhythmic = ? ORDER BY \(Self.famousFirst) LIMIT ?",
               [.text(rhythmic), .int(Int64(limit))])
     }
 
@@ -147,8 +155,12 @@ final class PoetryDatabase: @unchecked Sendable {
 
     enum Arg { case int(Int64), text(String) }
 
+    /// 推送序列靠前的是名篇，列表和搜索结果也按它排
+    private static let famousFirst =
+        "(COALESCE(daily_ci_rank, daily_shi_rank) IS NULL), COALESCE(daily_ci_rank, daily_shi_rank), id"
+
     private static let columns =
-        "id, title, author, dynasty, collection, kind, rhythmic, content, notes, prologue, tags, daily_rank"
+        "id, title, author, dynasty, collection, kind, rhythmic, content, notes, prologue, tags, daily_ci_rank, daily_shi_rank"
 
     private func poems(_ sql: String, _ args: [Arg]) -> [Poem] {
         rows(sql, args) { stmt in
@@ -164,7 +176,7 @@ final class PoetryDatabase: @unchecked Sendable {
                 notes: (Self.text(stmt, 8) ?? "").components(separatedBy: "\n").filter { !$0.isEmpty },
                 prologue: Self.text(stmt, 9),
                 tags: (Self.text(stmt, 10) ?? "").components(separatedBy: "|").filter { !$0.isEmpty },
-                dailyRank: sqlite3_column_type(stmt, 11) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(stmt, 11))
+                inDailyRotation: sqlite3_column_type(stmt, 11) != SQLITE_NULL || sqlite3_column_type(stmt, 12) != SQLITE_NULL
             )
         }
     }

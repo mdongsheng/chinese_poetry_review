@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.verticalLayout) private var vertical = false
     @AppStorage(SettingsKey.fontScale) private var fontScale = 1.0
     @AppStorage(SettingsKey.claudeModel) private var model = ClaudeModel.opus.rawValue
+    @AppStorage(SettingsKey.dailyContent) private var dailyContent = DailyContent.alternate.rawValue
 
     @State private var apiKey = KeychainHelper.apiKey ?? ""
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
@@ -27,9 +28,12 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("每日推送一首词", isOn: $pushEnabled)
+                    Toggle("每日推送", isOn: $pushEnabled)
                     if pushEnabled {
                         DatePicker("推送时间", selection: pushTime, displayedComponents: .hourAndMinute)
+                    }
+                    Picker("推送内容", selection: $dailyContent) {
+                        ForEach(DailyContent.allCases) { Text($0.displayName).tag($0.rawValue) }
                     }
                     if authStatus == .denied {
                         Button("通知权限已关闭，去系统设置开启") {
@@ -51,7 +55,7 @@ struct SettingsView: View {
                 } header: {
                     Text("推送")
                 } footer: {
-                    Text("推送使用本机定时通知，无需联网也会准时到达。若已填写 API Key，App 会提前生成解析，通知里会附上一句导读。")
+                    Text("诗词交替：一天词、一天律诗（五律、七律）。推送使用本机定时通知，无需联网也会准时到达。若已填写 API Key，App 会提前生成解析，通知里会附上一句导读。")
                 }
 
                 Section {
@@ -85,7 +89,7 @@ struct SettingsView: View {
 
                 Section("关于") {
                     LabeledContent("收录作品", value: "\(PoetryDatabase.shared.totalCount) 首")
-                    LabeledContent("每日一词轮换", value: "\(PoetryDatabase.shared.dailyCount) 首")
+                    LabeledContent("推送轮换", value: "词 \(PoetryDatabase.shared.dailyCiCount) 首 · 律诗 \(PoetryDatabase.shared.dailyShiCount) 首")
                     Link("数据来源：chinese-poetry", destination: URL(string: "https://github.com/chinese-poetry/chinese-poetry")!)
                 }
             }
@@ -102,6 +106,10 @@ struct SettingsView: View {
             }
             .onChange(of: pushHour) { _, _ in reschedule() }
             .onChange(of: pushMinute) { _, _ in reschedule() }
+            .onChange(of: dailyContent) { _, _ in
+                reschedule()
+                Task { await AnalysisService.shared.prefetchUpcoming(days: 3) }
+            }
             .task { await refreshAuth() }
         }
     }

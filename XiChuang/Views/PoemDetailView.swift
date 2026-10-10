@@ -139,8 +139,8 @@ struct PoemDetailView: View {
         defer { loading = false }
         do {
             analysis = try await AnalysisService.shared.analysis(for: poem, forceRefresh: force)
-            if poem.dailyRank != nil {
-                // 若是即将推送的词，让通知正文用上新的导读
+            if poem.inDailyRotation {
+                // 若是即将推送的作品，让通知正文用上新的导读
                 await NotificationManager.reschedule()
             }
         } catch {

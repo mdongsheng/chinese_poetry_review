@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 「今日」页：一天一首词，左右滑动可翻看往日。
+/// 「今日」页：一天一首词或律诗，左右滑动可翻看往日。
 struct TodayView: View {
     /// 从首次使用那天起，最多往回翻 30 天；最后一页是今天
     private let dates: [Date]
@@ -95,7 +95,7 @@ private struct DayPage: View {
                 Text(ChineseDate.lunar(date))
                     .font(Theme.poem(15))
                     .foregroundStyle(Theme.ink)
-                Text(isToday ? "今日一词" : "往日一词")
+                Text("\(isToday ? "今日" : "往日")一\(poem?.kind.label ?? "词")")
                     .font(Theme.poem(13))
                     .foregroundStyle(Theme.inkLight)
             }

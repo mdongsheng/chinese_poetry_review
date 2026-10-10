@@ -8,6 +8,7 @@ enum SettingsKey {
     static let verticalLayout = "verticalLayout"
     static let fontScale = "fontScale"
     static let claudeModel = "claudeModel"
+    static let dailyContent = "dailyContent"
     static let anchorDate = "dailyAnchorDate"
 }
 
@@ -22,14 +23,34 @@ enum AppSettings {
             SettingsKey.verticalLayout: false,
             SettingsKey.fontScale: 1.0,
             SettingsKey.claudeModel: ClaudeModel.opus.rawValue,
+            SettingsKey.dailyContent: DailyContent.alternate.rawValue,
         ])
     }
 
     static var pushEnabled: Bool { defaults.bool(forKey: SettingsKey.pushEnabled) }
     static var pushHour: Int { defaults.integer(forKey: SettingsKey.pushHour) }
     static var pushMinute: Int { defaults.integer(forKey: SettingsKey.pushMinute) }
+    static var dailyContent: DailyContent {
+        DailyContent(rawValue: defaults.string(forKey: SettingsKey.dailyContent) ?? "") ?? .alternate
+    }
+
     static var model: ClaudeModel {
         ClaudeModel(rawValue: defaults.string(forKey: SettingsKey.claudeModel) ?? "") ?? .opus
+    }
+}
+
+/// 每日推送的内容
+enum DailyContent: String, CaseIterable, Identifiable {
+    case alternate, ci, lushi
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .alternate: "诗词交替"
+        case .ci: "只推词"
+        case .lushi: "只推律诗"
+        }
     }
 }
 

@@ -25,7 +25,8 @@ struct Poem: Identifiable, Hashable, Sendable {
     let notes: [String]
     let prologue: String?
     let tags: [String]
-    let dailyRank: Int?
+    /// 是否在每日推送序列里（词或律诗）
+    let inDailyRotation: Bool
 
     var fullText: String { lines.joined(separator: "\n") }
 

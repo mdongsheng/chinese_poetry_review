@@ -67,7 +67,7 @@ enum NotificationManager {
 
     private static func makeContent(for poem: Poem, withImage: Bool) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = "今日一词 ·《\(poem.title)》"
+        content.title = "今日一\(poem.kind.label) ·《\(poem.title)》"
         content.subtitle = poem.byline
         if let analysis = AnalysisService.cached(poem.id) {
             content.body = "\(poem.excerpt)\n\n\(analysis.summary)"

@@ -34,7 +34,7 @@ struct ShareCardView: View {
                     .foregroundStyle(Theme.inkLight)
                     .multilineTextAlignment(.center)
             }
-            Text("每日一词")
+            Text("每日诗词")
                 .font(Theme.poem(12))
                 .foregroundStyle(Theme.inkFaint)
                 .padding(.top, 8)

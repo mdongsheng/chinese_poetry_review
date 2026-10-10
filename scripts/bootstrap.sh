@@ -7,7 +7,7 @@ echo "==> 1/3 生成诗词库"
 if [ ! -d .build/venv ]; then
   python3 -m venv .build/venv
 fi
-.build/venv/bin/pip install --quiet opencc
+.build/venv/bin/pip install --quiet opencc pypinyin
 .build/venv/bin/python scripts/build_database.py "$@"
 
 echo "==> 2/3 下载字体（霞鹜文楷，SIL OFL 1.1）"
