@@ -40,7 +40,7 @@ targets:
     info:
       path: XiChuang/Info.plist
       properties:
-        CFBundleDisplayName: 每日一词
+        CFBundleDisplayName: 每日诗词
         CFBundleDevelopmentRegion: zh-Hans
         UILaunchScreen: {}
         UIApplicationSceneManifest:
