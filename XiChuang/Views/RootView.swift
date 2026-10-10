@@ -27,7 +27,7 @@ struct RootView: View {
                 .sheet(item: $router.presentedPoem) { poem in
                     NavigationStack {
                         PoemDetailView(poem: poem)
-                            .navigationDestination(for: Poem.self) { PoemDetailView(poem: $0) }
+                            .appRoutes()
                             .toolbar {
                                 ToolbarItem(placement: .cancellationAction) {
                                     Button("关闭") { router.presentedPoem = nil }

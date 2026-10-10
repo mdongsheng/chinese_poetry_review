@@ -26,7 +26,7 @@ struct TodayView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .paperBackground()
-            .navigationDestination(for: Poem.self) { PoemDetailView(poem: $0) }
+            .appRoutes()
             .toolbar(.hidden, for: .navigationBar)
         }
     }
@@ -47,7 +47,7 @@ private struct DayPage: View {
             VStack(spacing: 28) {
                 header
                 if let poem {
-                    NavigationLink(value: poem) {
+                    NavigationLink(value: Route.poem(poem)) {
                         VStack(spacing: 24) {
                             PoemTextView(poem: poem, vertical: vertical, scale: fontScale)
                             if let analysis {
@@ -112,7 +112,7 @@ private struct DayPage: View {
             } label: {
                 Image(systemName: favorites.contains(poem.id) ? "bookmark.fill" : "bookmark")
             }
-            NavigationLink(value: poem) {
+            NavigationLink(value: Route.poem(poem)) {
                 Text("阅读解析")
                     .font(Theme.poem(15))
                     .padding(.horizontal, 22)

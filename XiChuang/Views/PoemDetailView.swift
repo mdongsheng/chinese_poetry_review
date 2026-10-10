@@ -41,17 +41,13 @@ struct PoemDetailView: View {
                     card("原注", poem.notes.joined(separator: "\n"))
                 }
                 if let author, !author.description.isEmpty {
-                    NavigationLink {
-                        PoemListView(title: author.name, poems: PoetryDatabase.shared.poems(byAuthor: author.name))
-                    } label: {
+                    NavigationLink(value: Route.author(author.name)) {
                         card("作者 · \(author.name)", author.description, lineLimit: 8, showsChevron: true)
                     }
                     .buttonStyle(.plain)
                 }
                 if let rhythmic = poem.rhythmic {
-                    NavigationLink {
-                        PoemListView(title: rhythmic, poems: PoetryDatabase.shared.poems(byRhythmic: rhythmic))
-                    } label: {
+                    NavigationLink(value: Route.rhythmic(rhythmic)) {
                         HStack {
                             Text("更多「\(rhythmic)」")
                             Image(systemName: "chevron.right").font(.caption)

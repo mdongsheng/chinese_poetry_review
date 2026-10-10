@@ -24,7 +24,7 @@ struct FavoritesView: View {
             }
             .paperBackground()
             .navigationTitle("收藏")
-            .navigationDestination(for: Poem.self) { PoemDetailView(poem: $0) }
+            .appRoutes()
         }
     }
 }

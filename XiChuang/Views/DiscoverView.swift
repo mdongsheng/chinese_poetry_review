@@ -5,7 +5,7 @@ struct DiscoverView: View {
     @State private var query = ""
     @State private var results: [Poem] = []
     @State private var searching = false
-    @State private var randomPoem: Poem?
+    @State private var path: [Route] = []
 
     private let collections: [(name: String, subtitle: String, tag: String?)] = [
         ("宋词", "宋词三百首", "宋词三百首"),
@@ -23,7 +23,7 @@ struct DiscoverView: View {
     ]
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 if !query.isEmpty {
                     searchResults
@@ -37,8 +37,7 @@ struct DiscoverView: View {
             .navigationTitle("发现")
             .searchable(text: $query, prompt: "题目、作者、名句")
             .task(id: query) { await search() }
-            .navigationDestination(for: Poem.self) { PoemDetailView(poem: $0) }
-            .navigationDestination(item: $randomPoem) { PoemDetailView(poem: $0) }
+            .appRoutes()
         }
     }
 
@@ -58,12 +57,12 @@ struct DiscoverView: View {
     private var browse: some View {
         Section {
             Button {
-                randomPoem = PoetryDatabase.shared.randomPoem(kind: .ci)
+                if let p = PoetryDatabase.shared.randomPoem(kind: .ci) { path.append(.poem(p)) }
             } label: {
                 Label("随机一首词", systemImage: "dice")
             }
             Button {
-                randomPoem = PoetryDatabase.shared.randomLushi()
+                if let p = PoetryDatabase.shared.randomLushi() { path.append(.poem(p)) }
             } label: {
                 Label("随机一首律诗", systemImage: "shuffle")
             }
@@ -74,9 +73,7 @@ struct DiscoverView: View {
 
         Section("合集") {
             ForEach(collections, id: \.subtitle) { c in
-                NavigationLink {
-                    CollectionView(collection: c.name, title: c.subtitle, tag: c.tag)
-                } label: {
+                NavigationLink(value: Route.collection(name: c.name, title: c.subtitle, tag: c.tag)) {
                     HStack {
                         Text(c.subtitle).font(Theme.poem(17)).foregroundStyle(Theme.ink)
                         Spacer()
@@ -88,13 +85,13 @@ struct DiscoverView: View {
         .listRowBackground(Theme.paperDeep.opacity(0.5))
 
         Section("词牌") {
-            NavigationLink("常见词牌") { RhythmicListView() }
+            NavigationLink("常见词牌", value: Route.rhythmicList)
         }
         .font(Theme.poem(17))
         .listRowBackground(Theme.paperDeep.opacity(0.5))
 
         Section("词人") {
-            NavigationLink("宋词名家") { CiAuthorListView() }
+            NavigationLink("宋词名家", value: Route.authorList)
         }
         .font(Theme.poem(17))
         .listRowBackground(Theme.paperDeep.opacity(0.5))
@@ -120,7 +117,7 @@ struct PoemRow: View {
     let poem: Poem
 
     var body: some View {
-        NavigationLink(value: poem) {
+        NavigationLink(value: Route.poem(poem)) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(poem.title).font(Theme.title(17)).foregroundStyle(Theme.ink).lineLimit(1)
@@ -151,7 +148,7 @@ struct PoemListView: View {
 }
 
 /// 合集分页浏览（全宋诗有二十多万首，按需加载）
-private struct CollectionView: View {
+struct CollectionView: View {
     let collection: String
     let title: String
     let tag: String?
@@ -180,14 +177,12 @@ private struct CollectionView: View {
     }
 }
 
-private struct RhythmicListView: View {
+struct RhythmicListView: View {
     @State private var items: [(name: String, count: Int)] = []
 
     var body: some View {
         List(items, id: \.name) { item in
-            NavigationLink {
-                PoemListView(title: item.name, poems: PoetryDatabase.shared.poems(byRhythmic: item.name))
-            } label: {
+            NavigationLink(value: Route.rhythmic(item.name)) {
                 HStack {
                     Text(item.name).font(Theme.poem(17))
                     Spacer()
@@ -203,14 +198,12 @@ private struct RhythmicListView: View {
     }
 }
 
-private struct CiAuthorListView: View {
+struct CiAuthorListView: View {
     @State private var items: [(name: String, count: Int)] = []
 
     var body: some View {
         List(items, id: \.name) { item in
-            NavigationLink {
-                PoemListView(title: item.name, poems: PoetryDatabase.shared.poems(byAuthor: item.name))
-            } label: {
+            NavigationLink(value: Route.author(item.name)) {
                 HStack {
                     Text(item.name).font(Theme.poem(17))
                     Spacer()
