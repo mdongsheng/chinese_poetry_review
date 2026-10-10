@@ -69,7 +69,7 @@ struct PoemDetailView: View {
         .task(id: poem.id) {
             author = PoetryDatabase.shared.author(named: poem.author, dynasty: poem.dynasty)
             analysis = AnalysisService.cached(poem.id)
-            if analysis == nil && KeychainHelper.hasAPIKey { await load() }
+            if analysis == nil && AnalysisService.isConfigured { await load() }
         }
     }
 
@@ -114,9 +114,9 @@ struct PoemDetailView: View {
                 Text("正在研墨，生成解析…").font(Theme.poem(14)).foregroundStyle(Theme.inkLight)
             }
             .padding(.vertical, 24)
-        } else if !KeychainHelper.hasAPIKey {
+        } else if !AnalysisService.isConfigured {
             VStack(spacing: 10) {
-                Text("在「设置」中填写 Claude API Key 后，即可为每首作品生成译文、注释与赏析。")
+                Text("在「设置」中填写 Claude 或 DeepSeek 的 API Key 后，即可为每首作品生成译文、注释与赏析。")
                     .font(Theme.body(14))
                     .foregroundStyle(Theme.inkLight)
                     .multilineTextAlignment(.center)
@@ -233,7 +233,7 @@ struct PoemDetailView: View {
                 } label: {
                     Label("复制原文", systemImage: "doc.on.doc")
                 }
-                if KeychainHelper.hasAPIKey {
+                if AnalysisService.isConfigured {
                     Button {
                         Task { await load(force: true) }
                     } label: {

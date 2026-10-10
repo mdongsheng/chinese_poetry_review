@@ -9,6 +9,8 @@ enum SettingsKey {
     static let fontScale = "fontScale"
     static let claudeModel = "claudeModel"
     static let dailyContent = "dailyContent"
+    static let analysisProvider = "analysisProvider"
+    static let deepSeekModel = "deepSeekModel"
     static let anchorDate = "dailyAnchorDate"
 }
 
@@ -24,6 +26,8 @@ enum AppSettings {
             SettingsKey.fontScale: 1.0,
             SettingsKey.claudeModel: ClaudeModel.opus.rawValue,
             SettingsKey.dailyContent: DailyContent.alternate.rawValue,
+            SettingsKey.analysisProvider: AnalysisProvider.claude.rawValue,
+            SettingsKey.deepSeekModel: AnalysisProvider.defaultDeepSeekModel,
         ])
     }
 
@@ -32,6 +36,15 @@ enum AppSettings {
     static var pushMinute: Int { defaults.integer(forKey: SettingsKey.pushMinute) }
     static var dailyContent: DailyContent {
         DailyContent(rawValue: defaults.string(forKey: SettingsKey.dailyContent) ?? "") ?? .alternate
+    }
+
+    static var provider: AnalysisProvider {
+        AnalysisProvider(rawValue: defaults.string(forKey: SettingsKey.analysisProvider) ?? "") ?? .claude
+    }
+
+    static var deepSeekModel: String {
+        let m = defaults.string(forKey: SettingsKey.deepSeekModel)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return m.isEmpty ? AnalysisProvider.defaultDeepSeekModel : m
     }
 
     static var model: ClaudeModel {
@@ -50,6 +63,45 @@ enum DailyContent: String, CaseIterable, Identifiable {
         case .alternate: "诗词交替"
         case .ci: "只推词"
         case .lushi: "只推律诗"
+        }
+    }
+}
+
+/// 生成解析用的服务
+enum AnalysisProvider: String, CaseIterable, Identifiable {
+    case claude, deepseek
+
+    /// DeepSeek 的模型名变动频繁，设置页可以从 /models 拉取最新列表替换
+    static let defaultDeepSeekModel = "deepseek-v4-pro"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .claude: "Claude（Anthropic）"
+        case .deepseek: "DeepSeek"
+        }
+    }
+
+    /// claude 沿用最早的账户名，升级后不用重填
+    var keychainAccount: String {
+        switch self {
+        case .claude: "anthropic-api-key"
+        case .deepseek: "deepseek-api-key"
+        }
+    }
+
+    var keyPlaceholder: String {
+        switch self {
+        case .claude: "sk-ant-…"
+        case .deepseek: "sk-…"
+        }
+    }
+
+    var consoleURL: URL {
+        switch self {
+        case .claude: URL(string: "https://console.anthropic.com/")!
+        case .deepseek: URL(string: "https://platform.deepseek.com/api_keys")!
         }
     }
 }

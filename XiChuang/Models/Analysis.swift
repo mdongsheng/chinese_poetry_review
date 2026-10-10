@@ -1,6 +1,6 @@
 import Foundation
 
-/// 由 Claude 生成的一首作品的解析，按 JSON 缓存在本地。
+/// 由 Claude 或 DeepSeek 生成的一首作品的解析，按 JSON 缓存在本地。
 struct Analysis: Codable, Hashable, Sendable {
     struct Annotation: Codable, Hashable, Sendable {
         let term: String
@@ -22,6 +22,30 @@ struct Analysis: Codable, Hashable, Sendable {
 
     var generatedAt: Date?
     var model: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case summary, translation, annotations, appreciation, background, formIntro, generatedAt, model
+    }
+
+    /// 宽松解码：DeepSeek 的 JSON 模式不校验字段，缺了的按空处理，至少要有导读或译文
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func text(_ key: CodingKeys) -> String {
+            ((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        summary = text(.summary)
+        translation = text(.translation)
+        annotations = ((try? c.decodeIfPresent([Annotation].self, forKey: .annotations)) ?? nil) ?? []
+        appreciation = text(.appreciation)
+        background = text(.background)
+        formIntro = text(.formIntro)
+        generatedAt = (try? c.decodeIfPresent(Date.self, forKey: .generatedAt)) ?? nil
+        model = (try? c.decodeIfPresent(String.self, forKey: .model)) ?? nil
+        if summary.isEmpty && translation.isEmpty {
+            throw DecodingError.dataCorruptedError(forKey: .summary, in: c, debugDescription: "缺少导读和译文")
+        }
+    }
 
     /// 传给 Claude 结构化输出的 JSON Schema，字段与上面一一对应
     static let jsonSchema: [String: Any] = [

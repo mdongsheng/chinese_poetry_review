@@ -22,7 +22,7 @@
 - **推送顺序**：名篇排在前面。
   - 词共 21,823 首：宋词三百首、南唐二主词、纳兰词最先，然后是花间集和宋词名家，最后是其余的全宋词。
   - 律诗共 88,522 首，只收五律、七律，不含古体、绝句、诗经、楚辞：唐诗三百首里的律诗最先，然后是唐代名家、宋代名家，最后是其余作品。律诗由脚本自动识别：八句、每句同为五字或七字，再按普通话声调粗查平仄。普通话没有入声，所以会有少量误判。
-- **解析**：调用 Claude API 生成导读、白话译文、字词注释、赏析、创作背景和词牌介绍，保存在本机，同一首只生成一次。App 会在后台提前生成接下来三天的解析，所以通知里能带上导读。花间集、南唐二主词的原注和水墨唐诗的题解直接显示，不需要 API Key。
+- **解析**：调用 Claude 或 DeepSeek 生成导读、白话译文、字词注释、赏析、创作背景和词牌介绍，保存在本机，同一首只生成一次。App 会在后台提前生成接下来三天的解析，所以通知里能带上导读。花间集、南唐二主词的原注和水墨唐诗的题解直接显示，不需要 API Key。
 - **阅读**：可横排或竖排（从右往左、去掉标点），能调字号，支持深色模式。
 - **发现**：按题目、作者、名句搜索；按合集、词牌、词人浏览；随机一首。
 - **收藏与分享**：可以收藏作品，也可以把作品分享成诗词卡片图片。
@@ -47,11 +47,19 @@ open XiChuang.xcodeproj
 
 ### 解析用的 API Key
 
-在 App 的「设置 → 解析（Claude）」里填写 [Anthropic API Key](https://console.anthropic.com/)。Key 保存在 iOS 钥匙串中，只用来直接请求 `api.anthropic.com`。
+在 App 的「设置 → 解析」里选择服务，填写对应的 API Key。两家的 Key 分别保存在 iOS 钥匙串中，只用来直接请求各自的官方接口。换服务后，已经生成的解析照常显示。
+
+**Claude**：在 [Anthropic Console](https://console.anthropic.com/) 申请 Key。
 
 - 默认模型是 Claude Opus 5.5，也可以改用 Sonnet 5.5 或 Haiku 5.5（最省钱）。
 - 请求使用结构化输出（JSON Schema），解析内容直接按字段显示。
 - 用 Opus 或 Sonnet 时，请求开启了服务端 `fallbacks: "default"`：遇到安全分类器误拒，服务端会自动换用推荐的模型重试。
+
+**DeepSeek**：在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) 申请 Key。
+
+- 调用 `https://api.deepseek.com/chat/completions`（OpenAI 兼容接口），用 JSON 模式输出，字段格式写在提示词里。
+- DeepSeek 的模型名变动频繁，所以模型可以手动填写，默认 `deepseek-v4-pro`。填好 Key 后点「获取可用模型」，可以从 `/models` 接口拉取当前账号可用的模型，再从列表里选。
+- JSON 模式只保证输出是合法 JSON，不检查字段；缺了的字段按空显示。导读和译文都缺时，算生成失败。
 
 ## 目录结构
 
@@ -66,7 +74,7 @@ XiChuang/
   Services/
     PoetryDatabase       只读 SQLite 查询
     DailyPoemProvider    日期 → 今日一词
-    AnalysisService      Claude 解析 + 本地缓存
+    AnalysisService      Claude / DeepSeek 解析 + 本地缓存
     NotificationManager  排未来 30 天的本地通知（附卡片图）
     BackgroundTasks      推送前在后台预生成解析
     FavoritesStore / KeychainHelper / AppSettings

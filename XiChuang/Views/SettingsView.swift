@@ -9,8 +9,13 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.fontScale) private var fontScale = 1.0
     @AppStorage(SettingsKey.claudeModel) private var model = ClaudeModel.opus.rawValue
     @AppStorage(SettingsKey.dailyContent) private var dailyContent = DailyContent.alternate.rawValue
+    @AppStorage(SettingsKey.analysisProvider) private var providerRaw = AnalysisProvider.claude.rawValue
+    @AppStorage(SettingsKey.deepSeekModel) private var deepSeekModel = AnalysisProvider.defaultDeepSeekModel
 
-    @State private var apiKey = KeychainHelper.apiKey ?? ""
+    @State private var apiKey = KeychainHelper.apiKey(for: AppSettings.provider) ?? ""
+    @State private var deepSeekModels: [String] = []
+    @State private var modelsError: String?
+    @State private var loadingModels = false
     @State private var authStatus: UNAuthorizationStatus = .notDetermined
     @State private var testSent = false
 
@@ -59,18 +64,27 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    SecureField("sk-ant-…", text: $apiKey)
+                    Picker("服务", selection: $providerRaw) {
+                        ForEach(AnalysisProvider.allCases) { Text($0.displayName).tag($0.rawValue) }
+                    }
+                    SecureField(provider.keyPlaceholder, text: $apiKey)
                         .textContentType(.password)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .onSubmit { saveKey() }
-                    Picker("模型", selection: $model) {
-                        ForEach(ClaudeModel.allCases) { Text($0.displayName).tag($0.rawValue) }
+                    switch provider {
+                    case .claude:
+                        Picker("模型", selection: $model) {
+                            ForEach(ClaudeModel.allCases) { Text($0.displayName).tag($0.rawValue) }
+                        }
+                    case .deepseek:
+                        deepSeekModelRows
                     }
+                    Link("申请 \(provider.displayName) API Key", destination: provider.consoleURL)
                 } header: {
-                    Text("解析（Claude）")
+                    Text("解析")
                 } footer: {
-                    Text("译文、注释、赏析由 Claude 生成，结果缓存在本机，同一首只生成一次。API Key 保存在钥匙串中，仅用于直接请求 api.anthropic.com。可在 console.anthropic.com 申请。")
+                    Text("译文、注释、赏析由所选服务生成，结果缓存在本机，同一首只生成一次，换服务后已生成的解析照常显示。各家的 API Key 分别保存在钥匙串中，只用于直接请求该服务的官方接口（api.anthropic.com / api.deepseek.com）。")
                 }
 
                 Section("阅读") {
@@ -97,6 +111,13 @@ struct SettingsView: View {
             .paperBackground()
             .navigationTitle("设置")
             .onChange(of: apiKey) { _, _ in saveKey() }
+            .onChange(of: providerRaw) { _, _ in
+                // 换服务时输入框显示该服务自己的 Key
+                apiKey = KeychainHelper.apiKey(for: provider) ?? ""
+                deepSeekModels = []
+                modelsError = nil
+                Task { await AnalysisService.shared.prefetchUpcoming(days: 3) }
+            }
             .onChange(of: pushEnabled) { _, on in
                 Task {
                     if on { _ = await NotificationManager.requestAuthorization() }
@@ -114,8 +135,49 @@ struct SettingsView: View {
         }
     }
 
+    private var provider: AnalysisProvider { AnalysisProvider(rawValue: providerRaw) ?? .claude }
+
+    /// DeepSeek 的模型名常有变动：可手填，也可以用 Key 拉取当前可用的模型
+    @ViewBuilder
+    private var deepSeekModelRows: some View {
+        LabeledContent("模型") {
+            TextField(AnalysisProvider.defaultDeepSeekModel, text: $deepSeekModel)
+                .multilineTextAlignment(.trailing)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+        }
+        if deepSeekModels.isEmpty {
+            Button(loadingModels ? "正在获取…" : "获取可用模型") {
+                Task { await loadDeepSeekModels() }
+            }
+            .disabled(apiKey.isEmpty || loadingModels)
+        } else {
+            Picker("可用模型", selection: $deepSeekModel) {
+                ForEach(deepSeekModels, id: \.self) { Text($0).tag($0) }
+                if !deepSeekModels.contains(deepSeekModel) {
+                    Text(deepSeekModel).tag(deepSeekModel)
+                }
+            }
+        }
+        if let modelsError {
+            Text(modelsError).font(.footnote).foregroundStyle(Theme.cinnabar)
+        }
+    }
+
+    private func loadDeepSeekModels() async {
+        loadingModels = true
+        modelsError = nil
+        defer { loadingModels = false }
+        do {
+            deepSeekModels = try await AnalysisService.deepSeekModels(apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+            if deepSeekModels.isEmpty { modelsError = "这个 Key 没有可用的模型。" }
+        } catch {
+            modelsError = error.localizedDescription
+        }
+    }
+
     private func saveKey() {
-        KeychainHelper.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        KeychainHelper.setAPIKey(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), for: provider)
     }
 
     private func reschedule() {
