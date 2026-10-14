@@ -11,6 +11,7 @@ actor AnalysisService {
         case refusal
         case truncated
         case badResponse
+        case badBaseURL(AnalysisProvider)
 
         var errorDescription: String? {
             switch self {
@@ -22,12 +23,22 @@ actor AnalysisService {
             case .refusal: "这首作品暂时无法生成解析。"
             case .truncated: "解析内容过长被截断，请重试。"
             case .badResponse: "解析结果无法识别，请重试。"
+            case .badBaseURL(let p): "\(p.displayName) 的接口地址格式不对，请在「设置」中检查。"
             }
         }
     }
 
-    private static let claudeEndpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    private static let deepSeekBase = URL(string: "https://api.deepseek.com")!
+    /// 接口地址：设置里填了就用自定义的，否则用官方地址
+    private static func baseURL(_ provider: AnalysisProvider) throws -> URL {
+        guard let url = AppSettings.baseURL(for: provider) else { throw Failure.badBaseURL(provider) }
+        return url
+    }
+
+    /// Anthropic Messages 接口。地址已经以 /v1 结尾（不少代理这样写）时不再重复加
+    private static func claudeEndpoint() throws -> URL {
+        let base = try baseURL(.claude)
+        return base.path().hasSuffix("/v1") ? base.appending(path: "messages") : base.appending(path: "v1/messages")
+    }
     private static let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 240
@@ -141,7 +152,7 @@ actor AnalysisService {
             "system": systemPrompt,
             "messages": [["role": "user", "content": userPrompt(poem)]],
         ]
-        var request = URLRequest(url: claudeEndpoint)
+        var request = URLRequest(url: try claudeEndpoint())
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -190,7 +201,7 @@ actor AnalysisService {
                 ["role": "user", "content": userPrompt(poem)],
             ],
         ]
-        var request = URLRequest(url: deepSeekBase.appending(path: "chat/completions"))
+        var request = URLRequest(url: try baseURL(.deepseek).appending(path: "chat/completions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "authorization")
@@ -210,7 +221,7 @@ actor AnalysisService {
 
     /// 设置页用：列出这个 Key 能用的 DeepSeek 模型
     static func deepSeekModels(apiKey: String) async throws -> [String] {
-        var request = URLRequest(url: deepSeekBase.appending(path: "models"))
+        var request = URLRequest(url: try baseURL(.deepseek).appending(path: "models"))
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "authorization")
         struct List: Decodable { struct Model: Decodable { let id: String }; let data: [Model] }
         return try JSONDecoder().decode(List.self, from: try await send(request)).data.map(\.id).sorted()

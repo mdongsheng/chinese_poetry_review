@@ -11,6 +11,8 @@ enum SettingsKey {
     static let dailyContent = "dailyContent"
     static let analysisProvider = "analysisProvider"
     static let deepSeekModel = "deepSeekModel"
+    static let claudeBaseURL = "claudeBaseURL"
+    static let deepSeekBaseURL = "deepSeekBaseURL"
     static let anchorDate = "dailyAnchorDate"
 }
 
@@ -40,6 +42,12 @@ enum AppSettings {
 
     static var provider: AnalysisProvider {
         AnalysisProvider(rawValue: defaults.string(forKey: SettingsKey.analysisProvider) ?? "") ?? .claude
+    }
+
+    /// 自定义的接口地址，留空用官方地址；格式不对时返回 nil
+    static func baseURL(for provider: AnalysisProvider) -> URL? {
+        let custom = defaults.string(forKey: provider.baseURLKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return AnalysisProvider.parseBaseURL(custom.isEmpty ? provider.defaultBaseURL : custom)
     }
 
     static var deepSeekModel: String {
@@ -89,6 +97,29 @@ enum AnalysisProvider: String, CaseIterable, Identifiable {
         case .claude: "anthropic-api-key"
         case .deepseek: "deepseek-api-key"
         }
+    }
+
+    var defaultBaseURL: String {
+        switch self {
+        case .claude: "https://api.anthropic.com"
+        case .deepseek: "https://api.deepseek.com"
+        }
+    }
+
+    var baseURLKey: String {
+        switch self {
+        case .claude: SettingsKey.claudeBaseURL
+        case .deepseek: SettingsKey.deepSeekBaseURL
+        }
+    }
+
+    /// 只接受 http(s) 且带主机名的地址，去掉末尾的斜杠
+    static func parseBaseURL(_ text: String) -> URL? {
+        var s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while s.hasSuffix("/") { s.removeLast() }
+        guard let url = URL(string: s), let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http", url.host() != nil else { return nil }
+        return url
     }
 
     var keyPlaceholder: String {

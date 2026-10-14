@@ -11,6 +11,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.dailyContent) private var dailyContent = DailyContent.alternate.rawValue
     @AppStorage(SettingsKey.analysisProvider) private var providerRaw = AnalysisProvider.claude.rawValue
     @AppStorage(SettingsKey.deepSeekModel) private var deepSeekModel = AnalysisProvider.defaultDeepSeekModel
+    @AppStorage(SettingsKey.claudeBaseURL) private var claudeBaseURL = ""
+    @AppStorage(SettingsKey.deepSeekBaseURL) private var deepSeekBaseURL = ""
 
     @State private var apiKey = KeychainHelper.apiKey(for: AppSettings.provider) ?? ""
     @State private var deepSeekModels: [String] = []
@@ -80,11 +82,12 @@ struct SettingsView: View {
                     case .deepseek:
                         deepSeekModelRows
                     }
+                    baseURLRows
                     Link("申请 \(provider.displayName) API Key", destination: provider.consoleURL)
                 } header: {
                     Text("解析")
                 } footer: {
-                    Text("译文、注释、赏析由所选服务生成，结果缓存在本机，同一首只生成一次，换服务后已生成的解析照常显示。各家的 API Key 分别保存在钥匙串中，只用于直接请求该服务的官方接口（api.anthropic.com / api.deepseek.com）。")
+                    Text("译文、注释、赏析由所选服务生成，结果缓存在本机，同一首只生成一次，换服务后已生成的解析照常显示。各家的 API Key 分别保存在钥匙串中，只发往该服务的接口地址：留空时是官方地址（api.anthropic.com / api.deepseek.com）；填了自定义地址，Key 会发给那个地址，请只填你信任的服务。DeepSeek 一栏也可以填其他兼容 OpenAI 接口的服务。")
                 }
 
                 Section("阅读") {
@@ -111,6 +114,11 @@ struct SettingsView: View {
             .paperBackground()
             .navigationTitle("设置")
             .onChange(of: apiKey) { _, _ in saveKey() }
+            .onChange(of: deepSeekBaseURL) { _, _ in
+                // 换了地址，之前拉到的模型列表不再适用
+                deepSeekModels = []
+                modelsError = nil
+            }
             .onChange(of: providerRaw) { _, _ in
                 // 换服务时输入框显示该服务自己的 Key
                 apiKey = KeychainHelper.apiKey(for: provider) ?? ""
@@ -136,6 +144,30 @@ struct SettingsView: View {
     }
 
     private var provider: AnalysisProvider { AnalysisProvider(rawValue: providerRaw) ?? .claude }
+
+    /// 当前服务的自定义接口地址
+    private var baseURL: Binding<String> {
+        provider == .claude ? $claudeBaseURL : $deepSeekBaseURL
+    }
+
+    @ViewBuilder
+    private var baseURLRows: some View {
+        LabeledContent("接口地址") {
+            TextField(provider.defaultBaseURL, text: baseURL)
+                .multilineTextAlignment(.trailing)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+        }
+        let text = baseURL.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            if AnalysisProvider.parseBaseURL(text) == nil {
+                Text("地址格式不对，应以 https:// 或 http:// 开头。")
+                    .font(.footnote).foregroundStyle(Theme.cinnabar)
+            }
+            Button("恢复官方地址") { baseURL.wrappedValue = "" }
+        }
+    }
 
     /// DeepSeek 的模型名常有变动：可手填，也可以用 Key 拉取当前可用的模型
     @ViewBuilder

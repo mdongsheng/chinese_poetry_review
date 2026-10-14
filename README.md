@@ -47,17 +47,26 @@ open XiChuang.xcodeproj
 
 ### 解析用的 API Key
 
-在 App 的「设置 → 解析」里选择服务，填写对应的 API Key。两家的 Key 分别保存在 iOS 钥匙串中，只用来直接请求各自的官方接口。换服务后，已经生成的解析照常显示。
+在 App 的「设置 → 解析」里选择服务，填写对应的 API Key。两家的 Key 分别保存在 iOS 钥匙串中。换服务后，已经生成的解析照常显示。
+
+每个服务都可以填「接口地址」，比如代理、中转服务或自建网关。留空就用官方地址；填写后，请求和 API Key 都会发到这个地址，所以只填你信任的服务。
+
+| 服务 | 官方地址 | 实际请求 |
+| --- | --- | --- |
+| Claude | `https://api.anthropic.com` | `{地址}/v1/messages`；地址已经以 `/v1` 结尾时，是 `{地址}/messages` |
+| DeepSeek | `https://api.deepseek.com` | `{地址}/chat/completions`；获取模型列表时是 `{地址}/models` |
+
+DeepSeek 一栏走的是 OpenAI 兼容格式，填上其他兼容 OpenAI 接口的服务地址、模型名和 Key，也能用来生成解析。
 
 **Claude**：在 [Anthropic Console](https://console.anthropic.com/) 申请 Key。
 
 - 默认模型是 Claude Opus 5.5，也可以改用 Sonnet 5.5 或 Haiku 5.5（最省钱）。
 - 请求使用结构化输出（JSON Schema），解析内容直接按字段显示。
-- 用 Opus 或 Sonnet 时，请求开启了服务端 `fallbacks: "default"`：遇到安全分类器误拒，服务端会自动换用推荐的模型重试。
+- 用 Opus 或 Sonnet 时，请求开启了服务端 `fallbacks: "default"`：遇到安全分类器误拒，服务端会自动换用推荐的模型重试。如果自定义地址指向的代理不认这个参数而报错，换成 Haiku 5.5 就不会带上它。
 
 **DeepSeek**：在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) 申请 Key。
 
-- 调用 `https://api.deepseek.com/chat/completions`（OpenAI 兼容接口），用 JSON 模式输出，字段格式写在提示词里。
+- 默认调用 `https://api.deepseek.com/chat/completions`（OpenAI 兼容接口），用 JSON 模式输出，字段格式写在提示词里。
 - DeepSeek 的模型名变动频繁，所以模型可以手动填写，默认 `deepseek-v4-pro`。填好 Key 后点「获取可用模型」，可以从 `/models` 接口拉取当前账号可用的模型，再从列表里选。
 - JSON 模式只保证输出是合法 JSON，不检查字段；缺了的字段按空显示。导读和译文都缺时，算生成失败。
 
