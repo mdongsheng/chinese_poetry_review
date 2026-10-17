@@ -378,10 +378,11 @@ def main():
     b = Builder(ensure_source(args.source))
     b.build()
     b.daily_order()
-    total, daily_ci, daily_shi = b.write(args.out)
-    size = os.path.getsize(args.out) / 1024 / 1024
+    out = os.path.abspath(args.out)  # 只给文件名时 dirname 为空，makedirs 会报错
+    total, daily_ci, daily_shi = b.write(out)
+    size = os.path.getsize(out) / 1024 / 1024
     print(f"完成: {total} 首作品, 每日推送 {daily_ci} 首词、{daily_shi} 首诗, "
-          f"作者 {len(b.authors)} 位, {size:.1f} MB → {args.out}")
+          f"作者 {len(b.authors)} 位, {size:.1f} MB → {out}")
 
 
 if __name__ == "__main__":
